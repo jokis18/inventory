@@ -5,8 +5,7 @@ function createUvTumbler($queue)
     $image_data = array();
     $imageUrls = array();
     global $s3;
-    $queue->started_at = date('Y-m-d H:i:s');
-    $data = json_decode($queue->data, true);
+    $data = $queue->data;
 
     if (isset($queue->file_name)) {
         $post = $data['post'];
@@ -22,9 +21,7 @@ function createUvTumbler($queue)
             }
             $image_data[] = $object["Key"];
         }
-        $shop = \App\Model\Shop::find($queue->shop);
-
-        $shopReq = [];
+        $shop = \App\Model\Shop::find($queue->shop_id);
 
         foreach ($image_data as $name) {
             if (pathinfo($name, PATHINFO_EXTENSION) != 'jpg') {
@@ -35,21 +32,6 @@ function createUvTumbler($queue)
             $size = $specs[0];
             $color = $specs[1];
             $imageUrls[$size][$color] = $name;
-        }
-
-        switch ($shop->myshopify_domain) {
-            case 'piper-lou-collection.myshopify.com':
-            case 'hopecaregive.myshopify.com':
-            case 'game-slave.myshopify.com':
-            default:
-                $html = '<meta charset="utf-8" />'.
-                        "<ul>".
-                            "<li>2x heat &amp; cold retention (compared to plastic tumblers).</li>".
-                            "<li>Double-walled vacuum insulation - Keeps Hot and Cold. </li>".
-                            "<li>Fits most cup holders, Clear lid to protect from spills. </li>".
-                            "<li>Sweat Free Design allows for a Strong Hold. </li>".
-                            "<li>These tumblers will ship separately from our distributor in Texas. </li>".
-                        '</ul>';
         }
 
         $product_data = array(
@@ -124,7 +106,6 @@ function createUvTumbler($queue)
             )
         ));
 
-        $queue->finish(array($res->product->id));
         return array($res->product->id);
     }
 }

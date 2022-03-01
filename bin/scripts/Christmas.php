@@ -1,9 +1,13 @@
 <?php
 
-function createChristmas($queue, Google_Client $client)
+use App\Model\Queue;
+use App\Model\Shop;
+use App\Model\Template;
+use App\Model\Setting;
+
+function createChristmas(Queue $queue, Shop $shop, Template $template, Setting $setting = null, Google_Client $client)
 {
     $results = array();
-    $vendor = 'Canvus Print';
     $variants = array(
         'Hoodie' => array(
             'Small' => array('price' => '32.99', 'weight' => '16.1'),
@@ -44,10 +48,8 @@ function createChristmas($queue, Google_Client $client)
     );
 
     global $s3;
-    $queue->started_at = date('Y-m-d H:i:s');
-    $data = json_decode($queue->data, true);
+    $data = $queue->data;
     $post = $data['post'];
-    $shop = \App\Model\Shop::find($queue->shop);
     $image_data = getImages($s3, $queue->file_name);
     $imageUrls = [];
     switch($shop->myshopify_domain) {
@@ -91,31 +93,6 @@ function createChristmas($queue, Google_Client $client)
                 )
             );
             break;
-        case 'piper-lou-collection.myshopify.com':
-        case 'importer-testing.myshopify.com':
-            $html = "<meta charset='utf-8' />
-                    <h5>Shipping &amp; Returns</h5>
-                    <p>We want you to<span> </span><strong>LOVE</strong><span> </span>your Piper Lou items! They will ship out within 4-10 days from your order. If you're not 100% satisfied within the first 30 days of receiving your product, let us know and we'll make it right.</p>
-                    <ul>
-                    <li>Hassle free return/exchange policy! </li>
-                    <li>Please contact us at<span> </span><strong>info@piperloucollection.com</strong><span> </span>with any questions. </li>
-                    </ul>
-                    <h5>Product Description</h5>
-                    <p><span>You are going to <strong>LOVE</strong> this design! We offer apparel in Short Sleeve shirts, Long Sleeve Shirts, Tank tops, and Hoodies. If you want information on sizing, please view the sizing chart below. </span></p>
-                    <p><span>Apparel is designed, printed, and shipped in the USA. 🇺🇲 🇺🇲 🇺🇲 🇺🇲 🇺🇲 🇺🇲 🇺🇲 🇺🇲 🇺🇲 </span></p>
-                    <p><a href='https://www.piperloucollection.com/pages/sizing-chart'>View our sizing chart</a></p>";
-            break;
-        case 'hopecaregive.myshopify.com':
-            $html = '<p><img src="https://cdn.shopify.com/s/files/1/1255/4519/files/16128476_220904601702830_291172195_n.jpg?9775130656601803865"></p><p>Designed, printed, and shipped in the USA!</p>';
-            break;
-        case 'game-slave.myshopify.com':
-            $html = '<p><img src="https://cdn.shopify.com/s/files/1/1066/2470/files/TC_Best_seller.jpg?v=1486047696"></p><p>Designed, printed, and shipped in the USA!</p>';
-            break;
-        default:
-            $html = '<p></p>';
-    }
-    if ($shop->description) {
-        $html = $shop->description;
     }
     $sku = generateSku($shop, $post['product_title']);
     $results = array(
@@ -134,29 +111,19 @@ function createChristmas($queue, Google_Client $client)
         $imageUrls[$style][$color] = $name;
     }
 
-    $tags = explode(',', trim($post['tags']));
-    $tags[] = 'christmas';
-    $tags = implode(',', $tags);
-    $product_data = array(
-        'title' => $post['product_title'],
-        'body_html' => $html,
-        'tags' => $tags,
-        'vendor' => $vendor,
-        'options' => array(
-            array(
-                'name' => "Size"
-            ),
-            array(
-                'name' => "Color"
-            ),
-            array(
-                'name' => "Style"
-            )
+    $product_data = getProductSettings($shop, $queue, $template, $setting);
+    $product_data['options'] = array(
+        array(
+            'name' => "Size"
         ),
-        'variants' => array(),
-        'images' => array()
+        array(
+            'name' => "Color"
+        ),
+        array(
+            'name' => "Style"
+        )
     );
-
+    $skuTemplate = getSkuTemplate($template, $setting, $queue);
     foreach ($variants as $style => $sizes) {
         switch ($style) {
             case 'Hoodie':
@@ -194,9 +161,15 @@ function createChristmas($queue, Google_Client $client)
                     'weight_unit' => 'oz',
                     'requires_shipping' => true,
                     'inventory_management' => null,
-                    'inventory_policy' => 'deny',
-                    'sku' => $variantSku
+                    'inventory_policy' => 'deny'
                 );
+                $variantData['size'] = $size;
+                $variantData['color'] = $color;
+                $variantData['style'] = $style;
+                $variantData['sku'] = generateLiquidSku($skuTemplate, $product_data, $shop, $variantData, $post, $data['file_name'], $queue);
+                unset($variantData['size']);
+                unset($variantData['color']);
+                unset($variantData['style']);
                 $product_data['variants'][] = $variantData;
             }
         }
@@ -252,10 +225,9 @@ function createChristmas($queue, Google_Client $client)
         if ($shop->google_access_token) {
             $client->setAccessToken($shop->google_access_token);
         }
-        logResults($client, $shop->google_sheet_slug, $post['print_type'], $results);
+        logResults($client, $shop->google_sheet_slug, $post['print_type'], $results, $shop->id);
     } else {
         error_log("No google sync...");
     }
-    $queue->finish(array($res->product->id));
     return array($res->product->id);
 }
