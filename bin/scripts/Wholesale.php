@@ -1,11 +1,13 @@
 <?php
 
 use App\Result\FrontPrint;
+use App\Model\Queue;
+use App\Model\Shop;
+use App\Model\Template;
+use App\Model\Setting;
 
-function createWholesaleApparel($queue)
+function createWholesaleApparel(Queue $queue, Shop $shop, Template $template, Setting $setting = null)
 {
-    $html = '';
-    $vendor = 'Edge Promotions';
     global $s3;
     $matrix = json_decode(file_get_contents(DIR.'/src/new_wholesale.json'), true);
     if (!$matrix) {
@@ -13,51 +15,35 @@ function createWholesaleApparel($queue)
     }
     // Ignore crew settings
     unset($matrix['Crew']);
-    $image_data = array();
     $images = array();
-    $queue->started_at = date('Y-m-d H:i:s');
-    $data = json_decode($queue->data, true);
+    $data = $queue->data;
 
     $image_data = getImages($s3, $queue->file_name);
     $designId = null;
 
     $post = $data['post'];
-    $details = $matrix[$post['wholesale_product_type']];
-    $shop = \App\Model\Shop::find($queue->shop);
+    $details = $matrix[$queue->sub_template_id];
     foreach ($image_data as $name) {
         if (pathinfo($name, PATHINFO_EXTENSION) != "jpg") {
             continue;
         }
 
-        if (is_null($designId)) {
-            $designId = getDesignIdFromFilename($name);
-        }
 
         $chunks = explode('/', $name);
         $fileName = $chunks[count($chunks) -1];
         $pieces = explode('-', basename($fileName, '.jpg'));
         $images[str_replace('_', ' ', trim($pieces[1], '_'))] = $name;
     }
-    $tags = explode(',', trim($post['tags']));
-    $tags = implode(',', $tags);
-    $product_data = array(
-        'title'         => $post['product_title'],
-        'body_html'     => $html,
-        'tags'          => $tags,
-        'vendor'        => $vendor,
-        'product_type'  => 'Apparel',
-        'options' => array(
-            array(
-                'name' => "Size"
-            ),
-            array(
-                'name' => "Color"
-            ),
+    $product_data = getProductSettings($shop, $queue, $template, $setting);
+    $product_data['options'] = array(
+        array(
+            'name' => "Size"
         ),
-        'variants'      => array(),
-        'images'        => array()
+        array(
+            'name' => "Color"
+        )
     );
-
+    $skuTemplate = getSkuTemplate($template, $setting, $queue);
     foreach ($images as $color => $src) {
         foreach($details['sizes'] as $size) {
             $varData = array(
@@ -69,13 +55,14 @@ function createWholesaleApparel($queue)
                 'weight_unit' => 'oz',
                 'requires_shipping' => true,
                 'inventory_management' => null,
-                'inventory_policy' => "deny",
-                'sku' => "PL - {$designId} - {$details['skuModifier']} - {$size} - {$color}"
+                'inventory_policy' => "deny"
             );
-            if ($post['wholesale_product_type'] == 'front_back_unisex_tee') {
-                $varData['sku'] = 'FBP - '.$varData['sku'];
-            }
 
+            $variantData['size'] = $size;
+            $variantData['color'] = $color;
+            $variantData['sku'] = generateLiquidSku($skuTemplate, $product_data, $shop, $variantData, $post, $data['file_name'], $queue);
+            unset($variantData['size']);
+            unset($variantData['color']);
             if($color == $post['default_color'] && $size == 'S') {
                 array_unshift($product_data['variants'], $varData);
             } else {
@@ -110,6 +97,5 @@ function createWholesaleApparel($queue)
             'images' => $imageUpdate
         )
     ));
-    $queue->finish(array($res->product->id));
     return array($res->product->id);
 }
