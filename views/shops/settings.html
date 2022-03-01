@@ -1,0 +1,94 @@
+{% extends "navbar.html" %}
+
+{% block styles %}
+<style media="screen">
+    .editor {
+        height: 150px
+    }
+    .hidden {
+        display: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="col-sm-8 col-sm-offset-2">
+    <form action="/shops/{{ shop.id }}" method="post">
+        <div class="panel panel-primary">
+            <div class="panel-heading">
+                {{ shop.myshopify_domain }} Template Settings
+            </div>
+            <div class="panel-body">
+                <div class="col-sm-12">
+                    <select id='template_select' class="form-control" name="template" onchange='selectCallback()'>
+                        <option>Select a Template</option>
+                        {% for template in templates %}
+                            <option value="{{template.handle}}">{{template.name}}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+{% if template %}
+<div class="col-sm-8 col-sm-offset-2">
+    <form action="/shops/{{ shop.id }}/settings/{{ template.id }}" method="post">
+        <div class="panel panel-primary">
+            <div class="panel-heading">
+                {{ shop.myshopify_domain }} - {{ template.name }}
+            </div>
+            <div class="panel-body">
+                <div class="form-group col-sm-6">
+                    <label class='control-label'>Vendor</label>
+                    <input type="text" name="vendor" value="{{ setting.vendor }}" placeholder="{{ template.vendor }}" class='form-control'>
+                </div>
+                <div class="form-group col-sm-6">
+                    <label class='control-label'>Product Type</label>
+                    <input type="text" name="product_type" value="{{ setting.product_type }}" placeholder="{{ template.product_type }}" class='form-control'>
+                </div>
+                <div class="form-group col-sm-6">
+                    <label class='control-label'>Tags</label>
+                    <input type="text" name="tags" value="{{ setting.tags }}" class='form-control'>
+                </div>
+                <div class='form-group col-sm-12'>
+                    <label class='control-label'>SKU Generation</label>
+                    <div id='sku_template_editor' class='editor form-control'>{{ setting.sku_template }}</div>
+                    <textarea name="sku_template" class='hidden'></textarea>
+                </div>
+                <div class="form-group col-sm-12">
+                    <label class='col-sm-3 control-label'>Description</label>
+                    <textarea name="description" rows="8" cols="80" class='form-control'>{{setting.description}}</textarea>
+                </div>
+            </div>
+            <div class="panel-footer">
+                <button type='submit' class='btn btn-sm btn-primary pull-right'>Update Template</button>
+                <div class="clearfix"></div>
+            </div>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    var editor = ace.edit('sku_template_editor');
+    editor.setTheme("ace/theme/chrome");
+    editor.session.setMode(`ace/mode/liquid`);
+    var textarea = $(`textarea[name="sku_template"]`);
+    editor.getSession().on("change", function () {
+        textarea.html(editor.getSession().getValue());
+    });
+    textarea.html(editor.getSession().getValue());
+
+    function selectCallback() {
+        var e = document.getElementById("template_select");
+        var template = e.options[e.selectedIndex].value;
+        var url = [location.protocol, '//', location.host, location.pathname].join('');
+        window.location.href = url + '?template='+template
+    }
+</script>
+{% endblock %}

@@ -1,18 +1,46 @@
-{% extends "templates/navbar.html" %}
+{% extends "navbar.html" %}
+
+{% block styles %}
+<style media="screen">
+    #advanced {
+        cursor: pointer;
+    }
+    .btn-file {
+        position: relative;
+        overflow: hidden;
+    }
+    .btn-file input[type=file] {
+        position: absolute;
+        top: 0;
+        right: 0;
+        min-width: 100%;
+        min-height: 100%;
+        font-size: 100px;
+        text-align: right;
+        filter: alpha(opacity=0);
+        opacity: 0;
+        outline: none;
+        background: white;
+        cursor: inherit;
+        display: block;
+    }
+</style>
+{% endblock %}
+
 
 {% block content %}
     <div class="row">
         {% if result %}
-            <div class="col-sm-10 col-sm-offset-1 alert alert-success">
+            <div class="col-sm-12 col-sm-offset-1 alert alert-success">
                 Product {{ result }} successfully created! <a href="https://{{store}}/admin/products/{{result}}" target="_blank">Click to review!</a>
             </div>
         {% endif %}
     </div>
     <div class="row">
         <form action="" method="post" enctype='multipart/form-data' id='productForm'>
-            <div class="col-lg-6 col-lg-offset-2 col-sm-12">
+            <div class="col-lg-10 col-lg-offset-1 col-sm-12">
                 {% if shops is empty %}
-                <div class="panel panel-default">
+                <div class="panel panel-primary">
                     <div class="panel-heading">
                         Create New Product
                     </div>
@@ -23,191 +51,153 @@
                     </div>
                 </div>
                 {% else %}
-                <div class="panel panel-default">
+                <div class="panel panel-primary">
                     <div class="panel-heading">
                         Product Details
+                        <span class='pull-right'><a href="/products/batch">Batch Upload</a></span>
                     </div>
                     <div class="panel-body">
-                        <div class='form-group col-lg-6 col-sm-12'>
-                            <label class='control-label'>Product Title</label>
-                            <input type="text" name="product_title" value="" class='form-control'>
-                        </div>
-                        <div class='form-group col-lg-6 col-sm-12'>
-                            <label class='control-label'>Vendor</label>
-                            <input type="text" name="vendor" value="BPP" class='form-control'>
-                        </div>
-                        <div class="form-group col-sm-12">
-                            <label class='control-label'>Tags</label>
-                            <textarea name="tags" rows="2" cols="40" placeholder='We can default this to whatever you want as well' class='form-control'></textarea>
-                        </div>
-                        <hr>
                         <div class='form-group col-sm-12'>
                             <label class='control-label'>ZIP File</label>
                             <input type="file" name="zip_file" value="">
                         </div>
-
-                        <div class="row">
-                            <div class="form-group col-sm-6">
-                                <label class='control-label'>Template</label>
-                                <select class="form-control" name="template" onchange='selectCallback()'>
-                                    {% for template in templates %}
-                                        {% if template.selected %}
-                                            <option value="{{ template.value }}" selected>{{ template.name }}</option>
-                                        {% else %}
-                                            <option value="{{ template.value }}">{{ template.name }}</option>
-                                        {% endif %}
-                                    {% endfor %}
-                                </select>
-                            </div>
+                        <div class="form-group col-lg-6 col-sm-12">
+                            <label class='control-label'>Shop</label>
+                            <select class='form-control' name='shop'>
+                                {% for shop in shops %}
+                                    {% if shop.id in user.default_shops %}
+                                        <option value="{{ shop.id}}" selected>{{shop.myshopify_domain}}</option>
+                                    {% else %}
+                                        <option value="{{ shop.id }}">{{ shop.myshopify_domain }}</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
                         </div>
 
-                        <div class="row" style='display:none' id='wholesale_product_type'>
-                            <div class="form-group col-sm-6">
-                                <select class="form-control" name="wholesale_product_type">
-                                    <option value="scoop_neck_jersey_tee" selected>3504 - LADIES' SCOOP NECK FINE JERSEY TEE</option>
-                                    <option value="vneck_fine_jersey_tee">3507 - LADIES' V-NECK FINE JERSEY TEE</option>
-                                    <option value="fine_jersey_tee">3516 - LADIES' FINE JERSEY TEE</option>
-                                    <option value="racerback_premium_tank">3521 - LADIES' RELAXED RACERBACK PREMIUM JERSEY TANK</option>
-                                    <option value="fine_jersey_cover_up">3522 - LADIES' V-NECK FINE JERSEY COVER-UP</option>
-                                    <option value="baseball_fine_jersey_tee">3530 - LADIES' BASEBALL FINE JERSEY TEE</option>
-                                    <option value="soccer_ringer_fine_jersey_tee">3532 - LADIES' SOCCER RINGER FINE JERSEY TEE</option>
-                                    <option value="football_fine_jersey_tee">3537 - LADIES' V-NECK FOOTBALL FINE JERSEY TEE</option>
-                                    <option value="slouchy_french_terry_pullover">3762 -  LADIES' SLOUCHY FRENCH TERRY PULLOVER</option>
-                                    <option value="curvy_premium_jersey_tee">3804 - LADIES' CURVY PREMIUM JERSEY TEE</option>
-                                    <option value="curvy_vneck_premium_jersey_tee">3807 - LADIES' CURVY V-NECK PREMIUM JERSEY TEE</option>
-                                    <option value="curvy_premium_jersey_tank">3821 - LADIES' CURVY PREMIUM JERSEY TANK</option>
-                                    <option value="curvy_baseball_premium_jersey_tee">3830 - LADIES' CURVY BASEBALL PREMIUM JERSEY TEE</option>
-                                    <option value="curvy_vneck_soccer_ringer_premium_jersey_tee">3832 - LADIES' CURVY V-NECK SOCCER RINGER PREMIUM JERSEY TEE</option>
-                                    <option value="curvy_vneck_football_premium_jersey_tee">3837 - LADIES' CURVY V-NECK FOOTBALL PREMIUM JERSEY TEE</option>
-                                    <option value="curvy_slouchy_french_terry_pullover">3862 - LADIES' CURVY SLOUCHY FRENCH TERRY PULLOVER</option>
-                                    <option value="unisex_fine_jersey_tee">6901 - UNISEX FINE JERSEY TEE</option>
-                                    <option value="front_back_unisex_tee">6901 - (FRONT/BACK) UNISEX TEE</option>
-                                    <option value="ladies_jersey_long">3588 - LADIES PREMIUM JERSEY LONG SLV</option>
-                                </select>
-                            </div>
+                        <div class='form-group col-lg-6 col-sm-12'>
+                            <label class='control-label'>Product Title</label>
+                            <input type="text" name="product_title" value="" class='form-control' required>
                         </div>
-                        <div class="row" style='display:none' id='tumbler_product_type'>
-                            <div class="form-group col-sm-6">
-                                <select class="form-control" name="tumbler_product_type">
-                                    <option value="etched">Standard Factory Colors (Etched)</option>
-                                    <option value="powder_coated">Custom Powder Coated (Piper Lou)</option>
-                                </select>
-                            </div>
+                        <div class='form-group col-lg-6 col-sm-12'>
+                            <label class='control-label'>Vendor</label>
+                            <input type="text" name="vendor" value="" class='form-control'>
                         </div>
-                        <div class="row" style='display:none' id='stemless_product_type'>
-                            <div class="form-group col-sm-6">
-                                <select class="form-control" name="stemless_product_type">
-                                    <option value="etched">Standard Factory Colors (Etched)</option>
-                                    <option value="powder_coated">Custom Powder Coated (Piper Lou)</option>
-                                </select>
-                            </div>
+                        <div class="form-group col-lg-6 col-sm-12">
+                            <label class='control-label'>SKU</label>
+                            <input type="text" name="sku" value="" class='form-control'>
                         </div>
-                        <div class="row">
-                            <div class="form-group col-sm-6">
-                                <label class='control-label'>Showcase Color</label>
-                                <select name='default_color' class='form-control'>
-                                    <option value='Navy' selected>Navy</option>
-                                    <option value='Black'>Black</option>
-                                    <option value='Charcoal'>Charcoal</option>
-                                    <option value='Royal'>Royal Blue</option>
-                                </select>
-                            </div>
-                            <div class="form-group col-sm-6">
-                                <label class='control-label'>Showcase Product</label>
-                                <select class='form-control' name="default_product">
-                                    <option value="Hoodie">Hoodie</option>
-                                    <option value="Tank">Tank</option>
-                                    <option value="Tee">Tee</option>
-                                    <option value="Long Sleeve" selected>Long Sleeve</option>
-                                </select>
-                            </div>
+                        <div class="form-group col-sm-12">
+                            <label class='control-label'>Tags</label>
+                            <input type='text' name="tags" placeholder='We can default this to whatever you want as well' class='form-control'>
                         </div>
-                        <div class="form-group">
-                            <label>
-                                <input type='checkbox' id='log_to_google' name="log_to_google" value="1" onchange='setGoogleFieldsVisibility()' checked>Log to Google
-                            </label>
+                        <div class="form-group col-sm-12">
+                            <label class='control-label'>Template</label>
+                            <select class="form-control" name="template">
+                                {% for template in templates %}
+                                    <option value="{{ template.handle }}">{{ template.name }}</option>
+                                {% endfor %}
+                            </select>
                         </div>
-                        <div id="google-fields">
-                            <div class="form-group">
-                                <label class='col-sm-3 control-label'>Print Type</label>
-                                <div class="col-sm-9">
-                                    <select class="form-control" name="print_type" onchange='setPrintType()'>
-                                        <option value="front_print" selected>Front Print</option>
-                                        <option value="back_print">Back Print</option>
-                                        <option value="double_sided">Front &amp; Back</option>
+
+                        <div id='sub_template_selector'>
+                            <input type="hidden" name="sub_template">
+                            {% for template in templates %}
+                                {% if template.sub_templates is not empty %}
+                                <div style='display:none' id='{{ template.handle }}_product_type' class="form-group col-sm-12 select_container">
+                                    <select class="form-control" >
+                                        <option value="" selected>Select a Sub-Template</option>
+                                        {% for child in template.sub_templates %}
+                                            {% if child.default %}
+                                                <option value="{{ child.value }}">{{ child.name }}</option>
+                                            {% else %}
+                                                <option value="{{ child.value }}">{{ child.name }}</option>
+                                            {% endif %}
+                                        {% endfor %}
                                     </select>
                                 </div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                        <div class="form-group col-sm-6">
+                            <input type="hidden" name="default_color">
+                            {% if template.showcase_colors is not empty %}
+                                <select class="form-control showcase_colors" style="display:none" id="showcase_color_{{ template.id }}">
+                                {% for showcase_color in template.showcase_colors %}
+                                    <option value="{{ showcase_color.value }}">{{ showcase_color.name }}</option>
+                                {% endfor %}
+                                </select>
+                            {% endif %}
+                        </div>
+                        <div class="form-group col-sm-6">
+                            <input type="hidden" name="default_product">
+                            {% if template.showcase_products is not empty %}
+                                <select class="form-control showcase_products" style="display:none" id="showcase_product_{{ template.id }}">
+                                {% for showcase_product in template.showcase_products %}
+                                <option value="{{ showcase_product.value }}">{{ showcase_product.name }}</option>
+                                {% endfor %}
+                                </select>
+                            {% endif %}
+                        </div>
+                        <div class="form-group col-sm-12">
+                            <div class="checkbox">
+                                <label>
+                                    <input type='checkbox' id='log_to_google' name="log_to_google" value="1" onchange='setGoogleFieldsVisibility()' checked>Log to Google
+                                </label>
                             </div>
-                            <div class="form-group" id='front_print_url_field'>
-                                <label class='col-sm-3 control-label'>Front Print URL</label>
-                                <div class="col-sm-9">
-                                    <input type="text" class='form-control' name="front_print_url" value="">
-                                </div>
+                        </div>
+                        <div id="google-fields">
+                            <div class="form-group col-sm-12">
+                                <label class='control-label'>Print Type</label>
+                                <select class="form-control" name="print_type" onchange='setPrintType()'>
+                                    <option value="front_print" selected>Front Print</option>
+                                    <option value="back_print">Back Print</option>
+                                    <option value="double_sided">Front &amp; Back</option>
+                                </select>
                             </div>
-                            <div class="form-group" id='back_print_url_field' style='display:none'>
-                                <label class='col-sm-3 control-label'>Back Print URL</label>
-                                <div class="col-sm-9">
-                                    <input type="text" class='form-control' name="back_print_url" value="">
-                                </div>
+                            <div class="form-group col-sm-6" id='front_print_url_field'>
+                                <label class='control-label'>Front Print URL</label>
+                                <input type="text" class='form-control' name="front_print_url" value="">
+                            </div>
+                            <div class="form-group col-sm-6" id='back_print_url_field' style='display:none'>
+                                <label class='control-label'>Back Print URL</label>
+                                <input type="text" class='form-control' name="back_print_url" value="">
                             </div>
                         </div>
                     </div>
                     <div class="panel-footer">
-                        <input type="submit" name="name" value="Submit" class='btn btn-primary pull-right' id='submit'>
+                        <input type="submit" name="name" value="Submit" class='btn btn-sm btn-primary pull-right' id='submit'>
                         <div class='clearfix'></div>
                     </div>
                 </div>
                 {% endif %}
             </div>
-            <div class="col-lg-2 col-sm-12">
-                <div class="panel panel-default">
-                    <div class="panel-heading">
-                        Stores
-                    </div>
-                    <div class="panel-body">
-                        {% for shop in shops %}
-                        <div class="checkbox">
-                            <label>
-                                {% if shop.id in [1,10] %}
-                                <input type="checkbox" name="stores[]" value="{{shop.id}}" checked>{{shop.myshopify_domain}}
-                                {% else %}
-                                <input type="checkbox" name="stores[]" value="{{shop.id}}">{{shop.myshopify_domain}}
-                                {% endif %}
-                            </label>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
         </form>
     </div>
 
-    <style media="screen">
-        #advanced {
-            cursor: pointer;
-        }
-        .btn-file {
-            position: relative;
-            overflow: hidden;
-        }
-        .btn-file input[type=file] {
-            position: absolute;
-            top: 0;
-            right: 0;
-            min-width: 100%;
-            min-height: 100%;
-            font-size: 100px;
-            text-align: right;
-            filter: alpha(opacity=0);
-            opacity: 0;
-            outline: none;
-            background: white;
-            cursor: inherit;
-            display: block;
-        }
-    </style>
+{% endblock %}
 
-    <script type="text/javascript">
+{% block scripts %}
+<script type="text/javascript">
+    $(document).ready(function() {
+        $('#advanced').click(function(ev) {
+            $('#advanced-wrapper').toggle();
+        })
+        $('#sub_template_selector select').on('change', function() {
+            $('input[name="sub_template"]').val($(this).val());
+        })
+        $('input[name="template"]').on('change', function(event) {
+            $('input[name="sub_template"]').val();
+            $('input[name="showcase_color"]').val();
+            $('.showcase_colors').hide();
+            $('input[name="showcase_product"]').val();
+            $('.showcase_products').hide();
+        })
+        $('.showcase_colors').on('change', function(event) {
+            $('input[name="showcase_color"]').val($(this).val());
+        })
+        $('.showcase_products').on('change', function(event) {
+            $('input[name="showcase_product"]').val($(this).val());
+        })
         function selectAllStores() {
             $('input[type="checkbox"]').each(function() {
                 if (!$(this).prop('checked')) {
@@ -215,6 +205,7 @@
                 }
             })
         }
+
         function deselectAllStores() {
             $('input[type="checkbox"]').each(function() {
                 if ($(this).prop('checked')) {
@@ -240,31 +231,28 @@
 
             }
         }
-
-        function selectCallback() {
-            var option = $('select[name="template"] :selected').val();
-            if (option == 'single_product') {
-                $('#log_to_google').prop('checked', true);
-            } else {
-                $('#log_to_google').prop('checked', false);
-            }
-            if (option == 'wholesale_apparel') {
-                $('#wholesale_product_type').show();
-            } else {
-                $('#wholesale_product_type').hide();
-            }
-            if (option == 'wholesale_tumbler') {
-                $('#tumbler_product_type').show();
-            } else {
-                $('#tumbler_product_type').hide();
-            }
-            if (option == 'stemless') {
-                $('#stemless_product_type').show();
-            } else {
-                $('#stemless_product_type').hide();
-            }
-            $('#log_to_google').trigger('change');
+        function showSubTemplates(selectorId)
+        {
+            var subSelector = $(selectorId);
+            $('#sub_template_selector .select_container').each(function(index) {
+                $(this).hide();
+            })
+            subSelector.show();
         }
+
+        function showShowcaseOptions(templateId)
+        {
+            var colors = "showcase_color_"+templateId;
+            var products = "showcase_color_"+templateId;
+            $('#'+colors).show();
+            $('#'+products).show();
+        }
+
+        $('select[name="template"]').on('change', function() {
+            var option = $('select[name="template"] :selected').val();
+            var subSelectorId = `#${option}_product_type`;
+            showSubTemplates(subSelectorId)
+        })
 
         function setGoogleFieldsVisibility() {
             if ($('input[name="log_to_google"]:checked').length > 0) {
@@ -274,17 +262,10 @@
             }
         }
 
-        $(document).ready(function() {
-            $('#advanced').click(function(ev) {
-                $('#advanced-wrapper').toggle();
-            })
-            $('input[type="checkbox"]').click(function() {
-                if ($('input[type="checkbox"]:checked').length > 0) {
-                    $('#submit').prop('disabled', false);
-                } else {
-                    $('#submit').prop('disabled', true);
-                }
-            })
-        })
-    </script>
+        // Initialize our form
+        var option = $('select[name="template"] :selected').val();
+        var subSelectorId = `#${option}_product_type`;
+        showSubTemplates(subSelectorId)
+    })
+</script>
 {% endblock %}

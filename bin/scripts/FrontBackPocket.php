@@ -1,8 +1,11 @@
 <?php
+use App\Model\Queue;
+use App\Model\Shop;
+use App\Model\Template;
+use App\Model\Setting;
 
-function createFrontBackPocket($queue)
+function createFrontBackPocket(Queue $queue, Shop $shop, Template $template, Setting $setting = null)
 {
-    $vendor = 'Canvus Print';
     $prices = array(
         'Tee' => array(
             'small' => array(
@@ -52,46 +55,30 @@ function createFrontBackPocket($queue)
 
     global $s3;
     $queue->started_at = date('Y-m-d H:i:s');
-    $data = json_decode($queue->data, true);
+    $data = $queue->data;
     $post = $data['post'];
-    $shop = \App\Model\Shop::find($queue->shop);
     $image_data = getImages($s3, $queue->file_name);
     $imageUrls = [];
-    if (in_array($shop->myshopify_domain, ['piper-lou-collection.myshopify.com', 'plcwholesale.myshopify.com'])) {
-        $vendor = 'BPP';
-    }
-    $html = '';
-    if ($shop->description) {
-        $html = $shop->description;
-    }
+
     foreach ($image_data as $name) {
         $productData = pathinfo($name)['filename'];
         $specs = explode('_-_', $productData);
         $color = $specs[1];
         $imageUrls[$color] = $name;
     }
-    $tags = explode(',', trim($post['tags']));
-    $tags = implode(',', $tags);
-    $product_data = array(
-        'title' => $post['product_title'],
-        'body_html' => $html,
-        'tags' => $tags,
-        'vendor' => $vendor,
-        'product_type' => 'Apparel',
-        'options' => array(
-            array(
-                'name' => "Size"
-            ),
-            array(
-                'name' => "Color"
-            ),
-            array(
-                'name' => "Style"
-            )
+    $product_data = getProductSettings($shop, $queue, $template, $setting);
+    $product_data['options'] = array(
+        array(
+            'name' => "Size"
         ),
-        'variants' => array(),
-        'images' => array()
+        array(
+            'name' => "Color"
+        ),
+        array(
+            'name' => "Style"
+        )
     );
+    $skuTemplate = getSkuTemplate($template, $setting, $queue);
     foreach ($prices as $style => $sizes) {
         foreach ($sizes as $size => $options) {
             foreach ($imageUrls as $color => $url) {
@@ -106,9 +93,15 @@ function createFrontBackPocket($queue)
                     'weight_unit' => 'oz',
                     'requires_shipping' => true,
                     'inventory_management' => null,
-                    'inventory_policy' => 'deny',
-                    'sku' => ""
+                    'inventory_policy' => 'deny'
                 );
+                $variantData['size'] = $size;
+                $variantData['color'] = $color;
+                $variantData['style'] = $style;
+                $variantData['sku'] = generateLiquidSku($skuTemplate, $product_data, $shop, $variantData, $post, $data['file_name'], $queue);
+                unset($variantData['size']);
+                unset($variantData['color']);
+                unset($variantData['style']);
                 $product_data['variants'][] = $variantData;
             }
         }

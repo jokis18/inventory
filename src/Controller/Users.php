@@ -5,16 +5,30 @@ namespace App\Controller;
 use App\Model\User;
 use App\Model\Shop;
 use App\Model\Errors;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
+use Slim\Flash\Messages;
+use Slim\Views\Twig;
 
 class Users
 {
-    public function __construct($view, $flash)
+    /**
+     * @var Twig
+     */
+    protected $view;
+
+    /**
+     * @var Messages
+     */
+    protected $flash;
+
+    public function __construct(Twig $view, Messages $flash)
     {
         $this->view = $view;
         $this->flash = $flash;
     }
 
-    public function index($request, $response, $arguments)
+    public function index(ServerRequestInterface $request, ResponseInterface $response, array $arguments = [])
     {
         $users = User::all();
         return $this->view->render($response, 'users/index.html', array(
@@ -22,7 +36,7 @@ class Users
         ));
     }
 
-    public function show($request, $response, $arguments)
+    public function show(ServerRequestInterface $request, ResponseInterface $response, array $arguments = [])
     {
         $uid = $arguments['id'];
         $user = User::find($uid);
@@ -36,7 +50,7 @@ class Users
         ));
     }
 
-    public function create($request, $response, $arguments)
+    public function create(ServerRequestInterface $request, ResponseInterface $response, array $arguments = [])
     {
         if ($request->getAttribute('user')->role != 'admin') {
             $this->flash->addMessage('error', Errors::UNAUTHORIZED);
@@ -70,7 +84,7 @@ class Users
         return $response->withRedirect("/users/{$user->id}");
     }
 
-    public function update($request, $response, $arguments)
+    public function update(ServerRequestInterface $request, ResponseInterface $response, array $arguments = [])
     {
         if ($request->getAttribute('user')->role != 'admin') {
             $this->flash->addMessage('error', Errors::UNAUTHORIZED);
@@ -104,7 +118,7 @@ class Users
         return $response->withRedirect("/users/{$arguments['id']}");
     }
 
-    public function delete($request, $response, $arguments)
+    public function delete(ServerRequestInterface $request, ResponseInterface $response, array $arguments = [])
     {
         if ($request->getAttribute('user')->role != 'admin') {
             $this->flash->addMessage('error', Errors::UNAUTHORIZED);
@@ -129,7 +143,7 @@ class Users
 
     }
 
-    public function access($request, $response, $arguments)
+    public function access(ServerRequestInterface $request, ResponseInterface $response, array $arguments = [])
     {
         if ($request->getAttribute('user')->role != 'admin') {
             $this->flash->addMessage('error', Errors::UNAUTHORIZED);
@@ -183,5 +197,21 @@ class Users
             $this->flash->addMessage('message', "Access succesfully updated");
             return $response->withRedirect("/users/{$arguments['id']}/access");
         }
+    }
+
+    public function settings(ServerRequestInterface $request, ResponseInterface $response, array $arguments = [])
+    {
+        $user = User::find($arguments['id']);
+        if ($request->isPost()) {
+            $body = $request->getParsedBody();
+            $user->default_shops = $body['default_shop'];
+            $user->save();
+            $this->flash->addMessage('message', "Default shops succesfully updated");
+            return $response->withRedirect("/users/{$arguments['id']}/settings");
+        }
+        return $this->view->render($response, 'users/settings.html', array(
+            'user' => $user,
+            'shops' => Shop::all()
+        ));
     }
 }

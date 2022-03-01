@@ -1,108 +1,88 @@
 <?php
-define("DIR", dirname(dirname(__FILE__)));
-require_once DIR.'/vendor/autoload.php';
-require_once DIR.'/src/common.php';
+require_once 'bootstrap.php';
 
 use App\Model\Queue;
+use App\Model\Shop;
+use App\Model\Template;
+use App\Model\Setting;
 use App\Model\Sku;
-
-$dbUrl = getenv("DATABASE_URL");
-$dbConfig = parse_url($dbUrl);
-
-$settings = array(
-    'db' => array(
-        'driver' => $dbConfig['scheme'] === 'postgres' ? 'pgsql' : 'mysql',
-        'host' => $dbConfig['host'],
-        'database' => ltrim($dbConfig['path'], '/'),
-        'username' => $dbConfig['user'],
-        'password' => $dbConfig['pass'],
-        'charset' => 'utf8',
-        'collation' => 'utf8_unicode_ci',
-        'prefix' => ''
-    )
-);
-
-$credentials = new \Aws\Credentials\Credentials(getenv("AWS_ACCESS_KEY"),getenv("AWS_ACCESS_SECRET"));
-$s3 = new \Aws\S3\S3Client([
-    'version' => 'latest',
-    'region' => 'us-east-1',
-    'credentials' => $credentials
-]);
-
-$app = new Slim\App(['settings' => $settings]);
-require_once DIR.'/src/container.php';
-$container = $app->getContainer();
-
-$client = $container->get('GoogleDrive');
-
-$capsule = new \Illuminate\Database\Capsule\Manager;
-$capsule->addConnection($settings['db']);
-$capsule->setAsGlobal();
-$capsule->bootEloquent();
-$capsule->getContainer()->singleton(
-    \Illuminate\Contracts\Debug\ExceptionHandler::class,
-    \App\CustomException::class
-);
+use App\Model\GoogleQueue;
 
 foreach (glob(DIR."/bin/scripts/*.php") as $file) {
     include_once ($file);
 }
 
 while (true) {
-    $queue = Queue::where('status', Queue::PENDING)
+    $queue = Queue::with('template', 'sub_template', 'shop')
+        ->where('status', Queue::PENDING)
         ->orderBy('created_at', 'asc')
         ->first();
     if (!$queue) {
-        sleep(10);
+        sleep(5);
     } else {
         try {
             $queue->start();
-            $data = json_decode($queue->data, true);
-            switch ($queue->template) {
+            $data = $queue->data;
+            $template = Template::where('handle', $queue->template_id)->first();
+            if (is_null($template)) {
+                throw new \Exception("Unsupported template '{$queue->template_id}'");
+            }
+            $setting = Setting::where(array(
+                'template_id' => $template->id,
+                'shop_id' => $queue->shop_id
+            ))->first();
+            $shop = Shop::find($queue->shop_id);
+            switch ($queue->template_id) {
                 case 'wholesale_apparel':
-                    $res = createWholesaleApparel($queue);
+                    $res = createWholesaleApparel($queue, $shop, $template, $setting);
                     break;
                 case 'wholesale_tumbler':
-                    $res = createWholesaleTumbler($queue);
+                    $res = createWholesaleTumbler($queue, $shop, $template, $setting);
                     break;
                 case 'hats':
-                    $res = createHats($queue);
+                    $res = createHats($queue, $shop, $template, $setting);
                     break;
                 case 'stemless':
-                    $res = createStemless($queue);
+                    $res = createStemless($queue, $shop, $template, $setting);
                     break;
                 case 'single_product':
-                    $res = processQueue($queue, $client);
+                    $res = processQueue($queue, $shop, $template, $setting, $client);
                     break;
                 case 'drinkware':
-                    $res = createDrinkware($queue);
+                    $res = createDrinkware($queue, $shop, $template, $setting);
                     break;
                 case 'uv_drinkware':
-                    $res = createUvDrinkware($queue);
+                    $res = createUvDrinkware($queue, $shop, $template, $setting);
+                    break;
+                case 'donation_uv_tumbler':
+                    $res = createDonationUVTumbler($queue, $shop, $template, $setting);
                     break;
                 case 'flasks':
-                    $res = createFlasks($queue);
+                    $res = createFlasks($queue, $shop, $template, $setting);
                     break;
                 case 'baby_body_suit':
-                    $res = createBabyBodySuit($queue, $client);
+                    $res = createBabyBodySuit($queue, $shop, $template, $setting, $client);
                     break;
                 case 'raglans':
-                    $res = createRaglans($queue, $client);
+                    $res = createRaglans($queue, $shop, $template, $setting, $client);
                     break;
                 case 'front_back_pocket':
-                    $res = createFrontBackPocket($queue, $client);
+                    $res = createFrontBackPocket($queue, $shop, $template, $setting, $client);
                     break;
                 case 'christmas':
-                    $res = createChristmas($queue, $client);
+                    $res = createChristmas($queue, $shop, $template, $setting, $client);
                     break;
                 case 'hats_masculine':
-                    $res = createMasculineHats($queue);
+                    $res = createMasculineHats($queue, $shop, $template, $setting);
                     break;
                 case 'grey_collection':
                     $res = createGreyCollection($queue, $client);
                     break;
+                case 'multistyle_hats':
+                    $res = createMultiHats($queue, $shop, $template, $setting);
+                    break;
                 default:
-                    throw new \Exception("Invalid template {$data['post']['template']} provided");
+                    throw new \Exception("Invalid template {$queue->template_id} provided");
             }
             $queue->finish($res);
             error_log("Queue {$queue->id} finished. ".json_encode($res));
@@ -151,7 +131,7 @@ function getSku($size)
     return $size;
 }
 
-function logResults(Google_Client $client, $sheet, $printType, array $results)
+function logResults(Google_Client $client, $sheet, $printType, array $results, $shopId)
 {
     if ($printType == 'front_print') {
         $sheetName = 'Front Print';
@@ -164,12 +144,29 @@ function logResults(Google_Client $client, $sheet, $printType, array $results)
     $range = $sheetName.'!A:J';
     $values = compressValues($results, $printType);
     foreach ($values as $value) {
-        $valueRange = new Google_Service_Sheets_ValueRange();
-        $valueRange->setValues(array('values' => $value));
-        // $valueRange->setValues(array(
-        //     'values' => ["a", "b"]
-        // ));
-        $service->spreadsheets_values->append($sheet, $range, $valueRange, array('valueInputOption' => "RAW"));
+        // $valueRange = new Google_Service_Sheets_ValueRange();
+        // $valueRange->setValues(array('values' => $value));
+        // // $valueRange->setValues(array(
+        // //     'values' => ["a", "b"]
+        // // ));
+        // $service->spreadsheets_values->append($sheet, $range, $valueRange, array('valueInputOption' => "RAW"));
+    }
+    foreach ($results['variants'] as $result) {
+        $googleQueue = new GoogleQueue();
+        $googleQueue->print_type = $printType;
+        $googleQueue->product_name = $results['product_name'];
+        $googleQueue->garment_name = '';
+        $googleQueue->product_fulfiller_code = $result['product_fulfiller_code'];
+        $googleQueue->shopify_product_admin_url = $results['shopify_product_admin_url'];
+        $googleQueue->front_print_file_url = $results['front_print_file_url'];
+        $googleQueue->back_print_file_url = $results['back_print_file_url'];
+        $googleQueue->garment_color = $result['garment_color'];
+        $googleQueue->product_sku = $result['product_sku'];
+        $googleQueue->integration_status = '';
+        $googleQueue->date = date('Y/m/d');
+        $googleQueue->status = 'pending';
+        $googleQueue->shop_id = $shopId;
+        $googleQueue->save();
     }
 }
 
@@ -242,21 +239,40 @@ function compressValues($results, $printType)
     return $return;
 }
 
-function getSkuFromFileName($fileName)
+function getProductSettings(Shop $shop, Queue $queue, Template $template, Setting $setting = null)
 {
-    $parts = explode('-', str_replace('.zip', '', $fileName));
-    if (count($parts) == 1) {
-        return $parts[0];
-    }
-    return implode(array($parts[0], $parts[1]), '-');
+    $tags = implode(',', array_merge(
+        str_getcsv($queue->tags),
+        str_getcsv($template->tags),
+        str_getcsv($setting->tags)
+    ));
+    return array(
+        'title' => $queue->title,
+        'body_html' => $queue->description ?: $setting->description ?: $shop->description ?: $template->description,
+        'tags' => $tags,
+        'product_type' => $queue->product_type ?: $setting->product_type ?: $template->product_type,
+        'vendor' => $queue->vendor ?: $setting->vendor ?: $template->vendor,
+        'variants' => array(),
+        'images' => array()
+    );
 }
 
-function getDesignIdFromFilename($fileName)
+function generateLiquidSku($skuTemplate, $product, Shop $shop, $variant, $post, $fileName, Queue $queue = null)
 {
-    if (is_null($designId)) {
-        $chunks = explode('/', $name);
-        $fileName = $chunks[count($chunks) - 2];
-        $pieces = explode('_-_', $fileName);
-        return $pieces[1];
-    }
+    $template = new \Liquid\Template();
+    $template->parse($skuTemplate);
+    $sku = $template->render(array(
+        'product' => $product,
+        'shop' => $shop,
+        'variant' => $variant,
+        'file' => str_replace('.zip', '', $fileName),
+        'data' => $post,
+        'queue' => $queue
+    ));
+    return $sku;
+}
+
+function getSkuTemplate(Template $template, Setting $setting = null, Queue $queue)
+{
+    return $queue->sku ?: $setting->sku_template ?: $template->sku_template;
 }
